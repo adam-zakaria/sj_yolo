@@ -45,6 +45,7 @@ from utils.metrics import ConfusionMatrix, ap_per_class, box_iou
 from utils.plots import output_to_target, plot_images, plot_val_study
 from utils.torch_utils import select_device, smart_inference_mode
 
+from tabulate import tabulate
 
 def save_one_txt(predn, save_conf, shape, file):
     # Save one txt result
@@ -322,6 +323,23 @@ def run(
             eval.accumulate()
             eval.summarize()
             map, map50 = eval.stats[:2]  # update results (mAP@0.5:0.95, mAP@0.5)
+
+            def create_small_table(data):
+                keys, values = tuple(zip(*data.items()))
+                table = tabulate(
+                    [values],
+                    headers=keys,
+                    tablefmt="pipe",
+                    floatfmt=".1f",
+                    stralign="center",
+                    numalign="center",
+                )
+                return table
+
+            metrics = ["AP", "AP50", "AP75", "APs", "APm", "APl", "AR1", "AR10", "AR100", "ARs", "ARm", "ARl"]
+            results = { metric: float(eval.stats[idx] * 100) for idx, metric in enumerate(metrics) }
+            print(create_small_table(results))
+
         except Exception as e:
             LOGGER.info(f'pycocotools unable to run: {e}')
 
