@@ -75,9 +75,16 @@ class Loggers():
             'val/box_loss',
             'val/obj_loss',
             'val/cls_loss',  # val loss
-            'x/lr0',
-            'x/lr1',
-            'x/lr2']  # params
+            'learning_rate/lr0',
+            'learning_rate/lr1',
+            'learning_rate/lr2',
+            'val2_metrics/precision',
+            'val2_metrics/recall',
+            'val2_metrics/mAP_0.5',
+            'val2_metrics/mAP_0.5:0.95',  # metrics
+            'val2_loss/box_loss',
+            'val2_loss/obj_loss',
+            'val2_loss/cls_loss']  # params
         self.best_keys = ['best/epoch', 'best/precision', 'best/recall', 'best/mAP_0.5', 'best/mAP_0.5:0.95']
         for k in LOGGERS:
             setattr(self, k, None)  # init empty logger dictionary
@@ -224,11 +231,12 @@ class Loggers():
 
     def on_fit_epoch_end(self, vals, epoch, best_fitness, fi):
         # Callback runs at the end of each fit (train+val) epoch
-        x = dict(zip(self.keys, vals))
+        keys = self.keys[:len(vals)]
+        x = dict(zip(keys, vals))
         if self.csv:
             file = self.save_dir / 'results.csv'
             n = len(x) + 1  # number of cols
-            s = '' if file.exists() else (('%20s,' * n % tuple(['epoch'] + self.keys)).rstrip(',') + '\n')  # add header
+            s = '' if file.exists() else (('%20s,' * n % tuple(['epoch'] + keys)).rstrip(',') + '\n')  # add header
             with open(file, 'a') as f:
                 f.write(s + ('%20.5g,' * n % tuple([epoch] + vals)).rstrip(',') + '\n')
 

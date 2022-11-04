@@ -109,9 +109,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     with torch_distributed_zero_first(LOCAL_RANK):
         data_dict = data_dict or check_dataset(data)  # check if None
     train_path, val_path = data_dict['train'], data_dict['val']
+    if 'val2' in data_dict.keys():
+        val2_path = data_dict['val2']
+    else:
+        val2_path = None
     nc = 1 if single_cls else int(data_dict['nc'])  # number of classes
     names = {0: 'item'} if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
-    is_coco = isinstance(val_path, str) and val_path.endswith('coco/val2017.txt')  # COCO dataset
+    is_coco = isinstance(val_path, str) and (val_path.endswith('coco/val2017.txt') or val_path.contains('nightowls') ) # COCO dataset
 
     # Model
     check_suffix(weights, '.pt')  # check weights
@@ -216,6 +220,21 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                        workers=workers * 2,
                                        pad=0.5,
                                        prefix=colorstr('val: '))[0]
+        if val2_path:
+            val2_loader = create_dataloader(val2_path,
+                                        imgsz,
+                                        batch_size // WORLD_SIZE * 2,
+                                        gs,
+                                        single_cls,
+                                        hyp=hyp,
+                                        cache=None if noval else opt.cache,
+                                        rect=True,
+                                        rank=-1,
+                                        workers=workers * 2,
+                                        pad=0.5,
+                                        prefix=colorstr('val2: '))[0]
+        else:
+            val2_loader = None
 
         if not resume:
             if not opt.noautoanchor:
@@ -357,6 +376,20 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                                                 plots=False,
                                                 callbacks=callbacks,
                                                 compute_loss=compute_loss)
+                if val2_loader:
+                    results2, _, _ = validate.run(data_dict,
+                                                      batch_size=batch_size // WORLD_SIZE * 2,
+                                                      imgsz=imgsz,
+                                                      half=amp,
+                                                      model=ema.ema,
+                                                      single_cls=single_cls,
+                                                      dataloader=val2_loader,
+                                                      save_dir=save_dir,
+                                                      plots=False,
+                                                      callbacks=callbacks,
+                                                      compute_loss=compute_loss)
+                else:
+                    results2 = None
 
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
@@ -364,6 +397,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             if fi > best_fitness:
                 best_fitness = fi
             log_vals = list(mloss) + list(results) + lr
+            if results2:
+                log_vals += list(results2)
             callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
 
             # Save model
